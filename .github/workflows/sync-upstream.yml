@@ -1,0 +1,62 @@
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ncat-portable
+          fetch-depth: 0
+      - name: Merge upstream and publish new tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add upstream https://github.com/nmap/nmap.git
+          git fetch upstream '+refs/heads/master:refs/remotes/upstream/master' '+refs/tags/*:refs/remotes/upstream-tags/*'
+          git merge --no-edit refs/remotes/upstream/master
+          git push origin HEAD:ncat-portable
+
+          patch="$RUNNER_TEMP/windows-builds.patch"
+          git diff --binary refs/remotes/upstream/master HEAD -- . ':!.github/upstream-tags.txt' > "$patch"
+          git for-each-ref --format='%(refname:strip=3)' refs/remotes/upstream-tags/ | sort > "$RUNNER_TEMP/upstream-tags.txt"
+          comm -23 "$RUNNER_TEMP/upstream-tags.txt" <(sort .github/upstream-tags.txt) > "$RUNNER_TEMP/new-tags.txt"
+          cp .github/upstream-tags.txt "$RUNNER_TEMP/seen-tags.txt"
+          while IFS= read -r tag; do
+            [[ "$tag" == v* ]] || continue
+            if ! git ls-remote --exit-code origin "refs/tags/$tag" > /dev/null; then
+              git checkout --detach "refs/remotes/upstream-tags/$tag^{commit}"
+              git apply --3way "$patch"
+              git commit -m "ci: add Windows builds for $tag"
+              git tag -a "$tag" -m "Windows build of nmap/nmap $tag"
+              git push origin "refs/tags/$tag"
+              git checkout ncat-portable
+            fi
+            if gh release view "$tag" > /dev/null 2>&1; then
+              echo "$tag" >> "$RUNNER_TEMP/seen-tags.txt"
+            else
+              gh workflow run ncat-portable.yml --ref ncat-portable -f "release_tag=$tag"
+            fi
+          done < "$RUNNER_TEMP/new-tags.txt"
+          sort -u "$RUNNER_TEMP/seen-tags.txt" > .github/upstream-tags.txt
+          if ! git diff --quiet -- .github/upstream-tags.txt; then
+            git add .github/upstream-tags.txt
+            git commit -m 'ci: record upstream tags'
+            git push origin HEAD:ncat-portable
+          fi
