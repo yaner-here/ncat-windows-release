@@ -1,4 +1,4 @@
-name: Ncat portable Windows
+name: Windows binaries
 
 on:
   workflow_dispatch:
@@ -11,6 +11,10 @@ on:
       - nsock/**
       - liblua/**
       - mswin32/**
+      - libnetutil/**
+      - liblinear/**
+      - libdnet-stripped/**
+      - libpcre/**
 
 permissions:
   contents: read
@@ -34,21 +38,42 @@ jobs:
           path: .portable-build/vcpkg
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          key: windows2022-vcpkg-0c2a9ace-x86-windows-static-v1
+          key: windows2022-vcpkg-0c2a9ace-nmap-x86-static-v1
+          restore-keys: windows2022-vcpkg-0c2a9ace-x86-windows-static-v1
           path: .portable-build/vcpkg/installed
-      - name: Install OpenSSL
+      - name: Install dependencies
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           & ./.portable-build/vcpkg/bootstrap-vcpkg.bat -disableMetrics
-          & ./.portable-build/vcpkg/vcpkg.exe install openssl:x86-windows-static --disable-metrics
+          & ./.portable-build/vcpkg/vcpkg.exe install openssl:x86-windows-static libssh2:x86-windows-static zlib:x86-windows-static --disable-metrics
       - name: Build Ncat
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           $prefix = "$env:GITHUB_WORKSPACE/.portable-build/vcpkg/installed/x86-windows-static"
-          msbuild ncat/ncat.vcxproj /m /p:Configuration=Release /p:Platform=Win32 /p:PlatformToolset=v143 "/p:OpenSSLDir=$prefix" /verbosity:minimal
+          msbuild ncat/ncat.vcxproj /m /p:Configuration=Release /p:Platform=Win32 /p:NsockPcapDefine=DISABLE_NSOCK_PCAP /p:PlatformToolset=v143 "/p:OpenSSLDir=$prefix" /verbosity:minimal
+      - name: Prepare Nmap dependencies
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $sdk = "$env:GITHUB_WORKSPACE/.portable-build/npcap"
+          Invoke-WebRequest https://npcap.com/dist/npcap-sdk-1.16.zip -OutFile .portable-build/npcap.zip
+          if ((Get-FileHash .portable-build/npcap.zip -Algorithm SHA256).Hash -ne 'f0a8be7778ee3ae1b99bbbecb27a3ff0f6c111a4093f1c78c5c5a099607184db') { throw 'Npcap SDK checksum mismatch' }
+          Expand-Archive .portable-build/npcap.zip -DestinationPath $sdk
+          cmake -S libpcre -B mswin32/build-pcre2 -A Win32 -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DBUILD_SHARED_LIBS=OFF
+          cmake -S libdnet-stripped -B mswin32/build-libdnet -A Win32 -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded "-DPacket_ROOT=$sdk"
+      - name: Build Nmap
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $prefix = "$env:GITHUB_WORKSPACE/.portable-build/vcpkg/installed/x86-windows-static"
+          $sdk = "$env:GITHUB_WORKSPACE/.portable-build/npcap"
+          msbuild liblinear/liblinear.vcxproj /m /p:Configuration=Release /p:Platform=Win32 /p:PlatformToolset=v143 /verbosity:minimal
+          msbuild libnetutil/libnetutil.vcxproj /m /p:Configuration=Release /p:Platform=Win32 /p:PlatformToolset=v143 "/p:NpcapDir=$sdk" /verbosity:minimal
+          msbuild mswin32/nmap.vcxproj /m /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /p:PlatformToolset=v143 /p:UseVcpkg=true "/p:OpenSSLDir=$prefix" "/p:NpcapDir=$sdk" /verbosity:minimal
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ncat-windows-x86-portable
-          path: ncat/Release/ncat.exe
+          name: windows-x86-binaries
+          path: |
+            ncat/Release/ncat.exe
+            mswin32/Release/nmap.exe
           if-no-files-found: error
           retention-days: 90
+
