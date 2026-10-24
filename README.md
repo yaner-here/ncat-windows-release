@@ -1,3 +1,12 @@
+# Ncat Windows Release
+
+[![Windows build](https://github.com/yaner-here/ncat-windows-release/actions/workflows/ncat-portable.yml/badge.svg)](https://github.com/yaner-here/ncat-windows-release/actions/workflows/ncat-portable.yml)
+
+> [!WARNING]
+> Unofficial, portable Windows builds of [Nmap Ncat](https://nmap.org/ncat/).
+
+---
+
 Nmap [![Build Status](https://github.com/nmap/nmap/actions/workflows/build.yml/badge.svg)](https://github.com/nmap/nmap/actions/workflows/build.yml)
 ====
 
