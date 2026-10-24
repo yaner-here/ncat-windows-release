@@ -99,7 +99,7 @@
 
 /* Required for windows compilation to Eliminate APPLINK errors.
    See http://www.openssl.org/support/faq.html#PROG2 */
-#ifdef WIN32
+#if defined(WIN32) && !defined(OPENSSL_NO_UPLINK)
 #include <openssl/applink.c>
 #endif
 

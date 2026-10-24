@@ -1,0 +1,54 @@
+name: Ncat portable Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ncat-portable]
+    paths:
+      - .github/workflows/ncat-portable.yml
+      - ncat/**
+      - nbase/**
+      - nsock/**
+      - liblua/**
+      - mswin32/**
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        with:
+          arch: x86
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: microsoft/vcpkg
+          ref: 0c2a9ace1964b818b15f7ae50ba1c42404918a7b # OpenSSL 3.6.5
+          path: .portable-build/vcpkg
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: windows2022-vcpkg-0c2a9ace-x86-windows-static-v1
+          path: .portable-build/vcpkg/installed
+      - name: Install OpenSSL
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          & ./.portable-build/vcpkg/bootstrap-vcpkg.bat -disableMetrics
+          & ./.portable-build/vcpkg/vcpkg.exe install openssl:x86-windows-static --disable-metrics
+      - name: Build Ncat
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $prefix = "$env:GITHUB_WORKSPACE/.portable-build/vcpkg/installed/x86-windows-static"
+          msbuild ncat/ncat.vcxproj /m /p:Configuration=Static /p:Platform=Win32 /p:PlatformToolset=v143 "/p:OpenSSLDir=$prefix" /verbosity:minimal
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ncat-windows-x86-portable
+          path: ncat/Release/ncat.exe
+          if-no-files-found: error
+          retention-days: 90
