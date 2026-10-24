@@ -1,3 +1,22 @@
+# Ncat Windows Release
+
+[![Windows build](https://github.com/yaner-here/ncat-windows-release/actions/workflows/ncat-portable.yml/badge.svg)](https://github.com/yaner-here/ncat-windows-release/actions/workflows/ncat-portable.yml)
+
+Unofficial, portable Windows builds of [Nmap Ncat](https://nmap.org/ncat/).
+Download `ncat.exe` or the ZIP with licenses and build records from
+[Releases](https://github.com/yaner-here/ncat-windows-release/releases).
+
+The x86 executable also runs on x64 Windows through WOW64. OpenSSL, its default
+and legacy providers, Lua, and the MSVC runtime are statically linked; only
+Windows system DLLs are required. TCP, UDP, TLS, SNI, explicit certificate
+verification, and Lua are tested with only the EXE in its runtime directory.
+
+See [usage and build instructions](mswin32/portable/README.md). Run **Ncat portable
+Windows** in the Actions tab to rebuild. This fork retains the upstream Nmap
+source and licenses; the original project information follows.
+
+---
+
 Nmap [![Build Status](https://github.com/nmap/nmap/actions/workflows/build.yml/badge.svg)](https://github.com/nmap/nmap/actions/workflows/build.yml)
 ====
 

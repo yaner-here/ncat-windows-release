@@ -1,0 +1,58 @@
+name: Ncat portable Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ncat-portable]
+    paths:
+      - .github/workflows/ncat-portable.yml
+      - mswin32/portable/**
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Resolve dependency cache path
+        id: dependency-path
+        shell: pwsh
+        run: |
+          $prefix = [IO.Path]::GetFullPath("$env:GITHUB_WORKSPACE/../nmap-mswin32-aux/OpenSSL")
+          "openssl=$prefix" >> $env:GITHUB_OUTPUT
+      - name: Restore static OpenSSL
+        id: openssl-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: windows2022-v143-openssl-45e844fa-x86-mt-no-module-v1
+          path: |
+            .portable-build/openssl
+            ${{ steps.dependency-path.outputs.openssl }}
+      - name: Build static OpenSSL
+        if: steps.openssl-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./mswin32/portable/build.ps1 -DependenciesOnly
+      - name: Cache static OpenSSL
+        if: steps.openssl-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: windows2022-v143-openssl-45e844fa-x86-mt-no-module-v1
+          path: |
+            .portable-build/openssl
+            ${{ steps.dependency-path.outputs.openssl }}
+      - name: Build static Ncat
+        shell: pwsh
+        run: ./mswin32/portable/build.ps1 -SkipDependencies
+      - name: Verify single executable and networking
+        shell: pwsh
+        run: ./mswin32/portable/verify.ps1
+      - name: Upload executable, provenance and test results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ncat-windows-x86-portable
+          path: portable-output/
+          if-no-files-found: error
+          retention-days: 90
