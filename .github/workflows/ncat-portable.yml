@@ -1,0 +1,68 @@
+name: Ncat portable Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ncat-portable]
+    paths:
+      - .github/workflows/ncat-portable.yml
+      - ncat/**
+      - nbase/**
+      - nsock/**
+      - liblua/**
+      - mswin32/**
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        with:
+          arch: x86
+      - name: Install build tools
+        run: |
+          choco install nasm --version=2.16.03 --yes --no-progress
+          "C:\Program Files\NASM" >> $env:GITHUB_PATH
+          "C:\Strawberry\perl\bin" >> $env:GITHUB_PATH
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: windows2022-openssl-3.5.9-x86-mt-no-module-msbuild-v1
+          restore-keys: windows2022-openssl-3.5.9-x86-mt-no-module-
+          path: .portable-build/openssl-install
+      - name: Build OpenSSL
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $prefix = "$env:GITHUB_WORKSPACE/.portable-build/openssl-install"
+          if (Test-Path "$prefix/lib/libcrypto.lib") { exit 0 }
+          New-Item -ItemType Directory -Force .portable-build | Out-Null
+          $archive = "$env:GITHUB_WORKSPACE/.portable-build/openssl.tar.gz"
+          Invoke-WebRequest https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne '603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a') {
+            throw 'OpenSSL source checksum mismatch'
+          }
+          tar -xzf $archive -C .portable-build
+          Set-Location .portable-build/openssl-3.5.9
+          perl Configure VC-WIN32 no-shared no-module no-tests --libdir=lib "--prefix=$prefix"
+          nmake /nologo
+          nmake /nologo install_sw
+          Copy-Item ms/applink.c "$prefix/include/openssl/applink.c"
+      - name: Build Ncat
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $prefix = "$env:GITHUB_WORKSPACE/.portable-build/openssl-install"
+          msbuild ncat/ncat.vcxproj /m /p:Configuration=Static /p:Platform=Win32 /p:PlatformToolset=v143 "/p:OpenSSLDir=$prefix" /verbosity:minimal
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ncat-windows-x86-portable
+          path: ncat/Release/ncat.exe
+          if-no-files-found: error
+          retention-days: 90

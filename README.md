@@ -1,3 +1,36 @@
+# Ncat Windows Release
+
+[![Windows build](https://github.com/yaner-here/ncat-windows-release/actions/workflows/ncat-portable.yml/badge.svg)](https://github.com/yaner-here/ncat-windows-release/actions/workflows/ncat-portable.yml)
+
+> [!WARNING]
+> Unofficial, portable Windows builds of [Nmap Ncat](https://nmap.org/ncat/).
+
+Download `ncat.exe` from [Releases](https://github.com/yaner-here/ncat-windows-release/releases).
+The x86 executable also runs on x64 Windows through WOW64. OpenSSL, its default
+and legacy providers, Lua, and the MSVC runtime are statically linked; only
+Windows system DLLs are required.
+
+```powershell
+.\ncat.exe example.com 9999
+.\ncat.exe --ssl --ssl-servername example.com example.com 9999
+```
+
+For certificate verification, use `--ssl-verify --ssl-trustfile trusted-ca.pem`.
+
+Run **Ncat portable Windows** in the Actions tab to rebuild. The workflow builds
+OpenSSL with `no-shared no-module`, then uses the upstream Visual Studio projects:
+
+```bat
+msbuild ncat\ncat.vcxproj /m /p:Configuration=Static /p:Platform=Win32 /p:PlatformToolset=v143 /p:OpenSSLDir=C:\path\to\openssl
+```
+
+Local builds require an x86 MSVC developer prompt and static OpenSSL headers and
+libraries under `OpenSSLDir`; see the workflow for dependency setup.
+Only `ncat.exe` is uploaded. Source and dependency licenses remain in this
+repository and in the linked OpenSSL source release.
+
+---
+
 Nmap [![Build Status](https://github.com/nmap/nmap/actions/workflows/build.yml/badge.svg)](https://github.com/nmap/nmap/actions/workflows/build.yml)
 ====
 

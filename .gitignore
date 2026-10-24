@@ -1,4 +1,6 @@
 # Makefiles
+/.portable-build/
+
 Makefile
 !liblinear/Makefile
 !liblinear/blas/Makefile
