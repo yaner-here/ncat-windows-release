@@ -43,8 +43,9 @@ action = function(host, port)
   -- check for a redirect
   if resp.location then
     redirect_url = resp.location[#resp.location]
-    if resp.status and tostring( resp.status ):match( "30%d" ) then
-      return {redirect_url = redirect_url, status = resp.status}, ("Did not follow redirect to %s"):format( redirect_url )
+    local status = resp.status
+    if redirect_url and status and status >= 300 and status < 400 then
+      return {redirect_url = redirect_url, status = status}, ("Did not follow redirect to %s"):format( redirect_url )
     end
   end
 
@@ -58,7 +59,7 @@ action = function(host, port)
   local display_title = title
 
   if display_title and display_title ~= "" then
-    display_title = string.gsub(display_title , "[\n\r\t]", "")
+    display_title = string.gsub(display_title, "%s+", " ")
     if #display_title > 65 then
       display_title = string.sub(display_title, 1, 62) .. "..."
     end
