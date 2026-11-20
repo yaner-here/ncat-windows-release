@@ -5,7 +5,6 @@ local string = require "string"
 local stringaux = require "stringaux"
 local table = require "table"
 
-local openssl = stdnse.silent_require "openssl"
 local ssh2 = stdnse.silent_require "ssh2"
 
 description = [[
@@ -105,6 +104,59 @@ categories = {"safe", "discovery"}
 
 portrule = shortport.ssh
 
+-- Offer as many options as possible. Some servers require a common KEX
+-- and host key algorithm before sending their proposal.
+local KEX_OPTIONS = {
+  kex_algorithms = "\z
+    mlkem768x25519-sha256,\z
+    sntrup761x25519-sha512,\z
+    sntrup761x25519-sha512@openssh.com,\z
+    curve25519-sha256,\z
+    curve25519-sha256@libssh.org,\z
+    ecdh-sha2-nistp521,\z
+    ecdh-sha2-nistp384,\z
+    ecdh-sha2-nistp256,\z
+    diffie-hellman-group18-sha512,\z
+    diffie-hellman-group16-sha512,\z
+    diffie-hellman-group15-sha512,\z
+    diffie-hellman-group14-sha256,\z
+    diffie-hellman-group14-sha1,\z
+    diffie-hellman-group-exchange-sha256,\z
+    diffie-hellman-group-exchange-sha1,\z
+    diffie-hellman-group1-sha1",
+  host_key_algorithms = "\z
+    ssh-mldsa44-ed25519,\z
+    ssh-ed25519,\z
+    ecdsa-sha2-nistp521,\z
+    ecdsa-sha2-nistp384,\z
+    ecdsa-sha2-nistp256,\z
+    rsa-sha2-512,\z
+    rsa-sha2-256,\z
+    ssh-rsa,\z
+    ssh-dss",
+  encryption_algorithms = "\z
+    chacha20-poly1305@openssh.com,\z
+    aes256-gcm@openssh.com,\z
+    aes128-gcm@openssh.com,\z
+    aes256-ctr,\z
+    aes192-ctr,\z
+    aes128-ctr,\z
+    aes256-cbc,\z
+    aes192-cbc,\z
+    aes128-cbc,\z
+    3des-cbc,\z
+    blowfish-cbc",
+  mac_algorithms = "\z
+    hmac-sha2-512-etm@openssh.com,\z
+    hmac-sha2-256-etm@openssh.com,\z
+    hmac-sha2-512,\z
+    hmac-sha2-256,\z
+    hmac-sha1-etm@openssh.com,\z
+    hmac-sha1,\z
+    hmac-md5,\z
+    hmac-ripemd160",
+}
+
 -- Build onto lists{} and possibly modify parsed{} based on whether the
 -- algorithm name-lists are identical between the server-to-client and
 -- client-to-server types.  Note that this simply modifies the passed tables.
@@ -115,15 +167,15 @@ local combine_types = function(parsed, lists)
     "compression_algorithms"
   }
 
-  for _, i in ipairs(doubles) do
-    local c2s = i .. "_client_to_server"
-    local s2c = i .. "_server_to_client"
+  for _, list in ipairs(doubles) do
+    local c2s = list .. "_client_to_server"
+    local s2c = list .. "_server_to_client"
 
     if parsed[c2s] == parsed[s2c] then
-      parsed[i] = parsed[c2s]
+      parsed[list] = parsed[c2s]
       parsed[c2s] = nil
       parsed[s2c] = nil
-      table.insert(lists, i)
+      table.insert(lists, list)
     else
       table.insert(lists, c2s)
       table.insert(lists, s2c)
@@ -135,9 +187,9 @@ end
 local output = function(parsed, lists)
   local out = stdnse.output_table()
 
-  for _, l in ipairs(lists) do
-    local v = parsed[l]
-    local a = v:len() > 0 and stringaux.strsplit(",", v) or {}
+  for _, list in ipairs(lists) do
+    local v = parsed[list]
+    local a = v and #v > 0 and stringaux.strsplit(",", v) or {}
     if nmap.verbosity() > 0 then
       setmetatable(a, {
         __tostring = function(t)
@@ -151,7 +203,7 @@ local output = function(parsed, lists)
         end
       })
     end
-    out[l] = a
+    out[list] = a
   end
 
   return out
@@ -183,7 +235,7 @@ action = function(host, port)
 
   -- send the client key exchange
   -- NB: The protocol does not prescribe which side sends the kex init first
-  status = sock:send(ssh.build(ssh.kex_init()))
+  status = sock:send(ssh.build(ssh.kex_init(KEX_OPTIONS)))
   if not status then
     sock:close()
     return
@@ -197,6 +249,10 @@ action = function(host, port)
   end
 
   local parsed = ssh.parse_kex_init(ssh.payload(response))
+  if not (parsed and next(parsed)) then
+    stdnse.debug1("Failed to parse server Key Exchange Init")
+    return
+  end
 
   local lists = {
     "kex_algorithms",
